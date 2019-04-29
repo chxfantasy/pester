@@ -16,7 +16,7 @@ func TestAsynGetCallBack(t *testing.T)  {
 	c.Backoff = ExponentialBackoff
 	c.MaxRetries = 3
 
-	url := "http://192.168.20.14/user/getPublicKey"
+	url := "http://localhost/mock"
 
 	stopChan := make(chan string)
 
@@ -70,7 +70,7 @@ func TestAsynPostCallBack(t *testing.T) {
 	c.Backoff = DefaultBackoff
 	c.MaxRetries = 5
 
-	url := "http://192.168.20.14:8081/abTest/v1/experiment/name/test2/value"
+	url := "http://localhost:8081/mock"
 
 	bodyParam := map[string]interface{}{"slotId":"1000"}
 	body, _ := json.Marshal(bodyParam)
