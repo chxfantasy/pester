@@ -14,7 +14,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sethgrid/pester"
+	"github.com/chxfantasy/pester"
 )
 
 type getter func(string) (*http.Response, error)

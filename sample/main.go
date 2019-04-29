@@ -21,8 +21,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/sethgrid/pester"
+	"github.com/chxfantasy/pester"
 )
+
+const DefaultTimeOut = 3*time.Second
 
 func init() {
 	rand.Seed(time.Now().Unix())
@@ -47,7 +49,7 @@ func main() {
 
 	log.Println("> pester.Get default")
 	{ // drop in replacement for http.Get and other client methods
-		resp, err := pester.Get(fmt.Sprintf("http://localhost:%d", port))
+		resp, err := pester.Get(fmt.Sprintf("http://localhost:%d", port), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error GETing default", err)
 		}
@@ -64,7 +66,7 @@ func main() {
 		client.Backoff = pester.ExponentialJitterBackoff
 		client.KeepLog = true
 
-		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error GETing with all options, %s\n\n", client.LogString())
 		}
@@ -79,10 +81,9 @@ func main() {
 		client.Backoff = func(retry int) time.Duration {
 			return time.Duration(retry*200) * time.Millisecond
 		}
-		client.Timeout = 5 * time.Second
 		client.KeepLog = true
 
-		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
+		resp, err := client.Get(fmt.Sprintf("http://localhost:%d", port), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error GETing custom backoff\n\n", client.LogString())
 		}
@@ -93,7 +94,7 @@ func main() {
 
 	log.Println("> pester.Post with defaults")
 	{ // use the pester.Post drop in replacement
-		resp, err := pester.Post(fmt.Sprintf("http://localhost:%d", port), "text/plain", strings.NewReader("data"))
+		resp, err := pester.Post(fmt.Sprintf("http://localhost:%d", port), "text/plain", strings.NewReader("data"), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error POSTing with defaults - %v\n\n", err)
 		}
@@ -108,7 +109,7 @@ func main() {
 		client.MaxRetries = 3
 		client.KeepLog = true
 
-		_, err := client.Post("http://localhost:9001", "application/json", strings.NewReader(`{"json":true}`))
+		_, err := client.Post("http://localhost:9001", "application/json", strings.NewReader(`{"json":true}`), DefaultTimeOut)
 		if err == nil {
 			log.Printf("expected to error after max retries of 3")
 		}
@@ -121,7 +122,7 @@ func main() {
 
 	log.Println("> pester.Head with defaults")
 	{ // use the pester.Head drop in replacement
-		resp, err := pester.Head(fmt.Sprintf("http://localhost:%d", port))
+		resp, err := pester.Head(fmt.Sprintf("http://localhost:%d", port), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error HEADing with defaults - %v\n\n", err)
 		}
@@ -132,7 +133,7 @@ func main() {
 
 	log.Println("> pester.PostForm with defaults")
 	{ // use the pester.Head drop in replacement
-		resp, err := pester.PostForm(fmt.Sprintf("http://localhost:%d", port), url.Values{"param1": []string{"val1a", "val1b"}, "param2": []string{"val2"}})
+		resp, err := pester.PostForm(fmt.Sprintf("http://localhost:%d", port), url.Values{"param1": []string{"val1a", "val1b"}, "param2": []string{"val2"}}, DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error POSTing a form with defaults - %v\n\n", err)
 		}
@@ -147,7 +148,7 @@ func main() {
 		if err != nil {
 			log.Fatal("Unable to create a new http request", err)
 		}
-		resp, err := pester.Do(req)
+		resp, err := pester.Do(req, DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error POSTing with Do() - %v\n\n", err)
 		}

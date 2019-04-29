@@ -19,6 +19,8 @@ import (
 	"time"
 )
 
+const DefaultTimeOut = 3*time.Second
+
 func TestConcurrentRequests(t *testing.T) {
 	t.Parallel()
 
@@ -28,7 +30,7 @@ func TestConcurrentRequests(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -56,7 +58,7 @@ func TestConcurrentRequestsWith429DefaultClient(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -88,7 +90,7 @@ func TestConcurrentRequestsWith400(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -120,7 +122,7 @@ func TestConcurrentRequestsWith429(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -152,7 +154,7 @@ func TestMaxRetriesConcurrentRequestsWith429DefaultClient(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -185,7 +187,7 @@ func TestMaxRetriesConcurrentRequestsWith400(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -218,7 +220,7 @@ func TestMaxRetriesConcurrentRequestsWith429(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -245,7 +247,7 @@ func TestConcurrent2Retry0(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -274,7 +276,7 @@ func TestConcurrent2Retry0for429DefaultClient(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	_, getErr := c.Get(url)
+	_, getErr := c.Get(url, DefaultTimeOut)
 
 	if getErr != nil {
 		t.Fatal("unable to GET", getErr)
@@ -305,7 +307,7 @@ func TestConcurrent2Retry0for429(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	_, getErr := c.Get(url)
+	_, getErr := c.Get(url, DefaultTimeOut)
 
 	if getErr != nil {
 		t.Fatal("unable to GET", getErr)
@@ -328,7 +330,7 @@ func TestDefaultBackoff(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -400,7 +402,7 @@ func TestCustomLogHook(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -426,7 +428,7 @@ func TestDefaultLogHook(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -446,7 +448,7 @@ func TestLinearJitterBackoff(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -485,7 +487,7 @@ func TestExponentialBackoff(t *testing.T) {
 
 	nonExistantURL := "http://localhost:9000/foo"
 
-	_, err := c.Get(nonExistantURL)
+	_, err := c.Get(nonExistantURL, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}
@@ -535,7 +537,7 @@ func TestCookiesJarPersistence(t *testing.T) {
 
 	url := fmt.Sprintf("http://localhost:%d", port)
 
-	response, err := c.Get(url)
+	response, err := c.Get(url, DefaultTimeOut)
 	if err != nil {
 		t.Fatal("unable to GET", err)
 	}
@@ -559,7 +561,7 @@ func TestEmbeddedClientTimeout(t *testing.T) {
 	hc.Timeout = clientTimeout
 
 	c := NewExtendedClient(hc)
-	_, err = c.Get(fmt.Sprintf("http://localhost:%d/", port))
+	_, err = c.Get(fmt.Sprintf("http://localhost:%d/", port), DefaultTimeOut)
 	if err == nil {
 		t.Error("expected a timeout error, did not get it")
 	}
@@ -583,7 +585,7 @@ func TestConcurrentRequestsNotRacyAndDontLeak_FailedRequest(t *testing.T) {
 		go func() {
 			<-block
 			defer wg.Done()
-			resp, err := c.Get(goodURL)
+			resp, err := c.Get(goodURL, DefaultTimeOut)
 			if err != nil {
 				errCh <- fmt.Errorf("got unexpected error getting %s, %v", goodURL, err)
 				return
@@ -630,7 +632,7 @@ func TestConcurrentRequestsNotRacyAndDontLeak_SuccessfulRequest(t *testing.T) {
 		go func() {
 			<-block
 			defer wg.Done()
-			resp, err := c.Get(nonExistantURL)
+			resp, err := c.Get(nonExistantURL, DefaultTimeOut)
 			if err == nil {
 				errCh <- fmt.Errorf("should have had an error getting %s", nonExistantURL)
 				return
@@ -687,7 +689,7 @@ func TestRetriesNotAttemptedIfContextIsCancelled(t *testing.T) {
 		t.Logf("\n%d - cancelled", time.Now().Unix())
 	}()
 
-	_, err = c.Do(req)
+	_, err = c.Do(req, DefaultTimeOut)
 	if err == nil {
 		t.Fatal("expected to get an error")
 	}

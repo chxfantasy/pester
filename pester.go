@@ -24,6 +24,8 @@ var ErrReadingBody = errors.New("error reading body")
 // ErrReadingRequestBody happens when we cannot read the request body bytes
 var ErrReadingRequestBody = errors.New("error reading request body")
 
+var ErrNoTimeOutSet = errors.New("error no timeout set for params")
+
 // Client wraps the http client and exposes all the functionality of the http.Client.
 // Additionally, Client provides pester specific values for handling resiliency.
 type Client struct {
@@ -33,7 +35,6 @@ type Client struct {
 	Transport     http.RoundTripper
 	CheckRedirect func(req *http.Request, via []*http.Request) error
 	Jar           http.CookieJar
-	Timeout       time.Duration
 
 	// pester specific
 	Concurrency int
@@ -83,6 +84,7 @@ type params struct {
 	bodyType string
 	body     io.Reader
 	data     url.Values
+	timeout       time.Duration
 }
 
 var random *rand.Rand
@@ -176,6 +178,9 @@ func (c *Client) pester(p params) (*http.Response, error) {
 	resultCh := make(chan result)
 	multiplexCh := make(chan result)
 	finishCh := make(chan struct{})
+	if p.timeout <= 0 {
+		return nil, ErrNoTimeOutSet
+	}
 
 	// track all requests that go out so we can close the late listener routine that closes late incoming response bodies
 	totalSentRequests := &sync.WaitGroup{}
@@ -201,7 +206,7 @@ func (c *Client) pester(p params) (*http.Response, error) {
 		c.hc.Transport = c.Transport
 		c.hc.CheckRedirect = c.CheckRedirect
 		c.hc.Jar = c.Jar
-		c.hc.Timeout = c.Timeout
+		c.hc.Timeout = p.timeout
 	}
 	c.Unlock()
 
@@ -400,28 +405,28 @@ func (c *Client) log(e ErrEntry) {
 }
 
 // Do provides the same functionality as http.Client.Do
-func (c *Client) Do(req *http.Request) (resp *http.Response, err error) {
-	return c.pester(params{method: "Do", req: req, verb: req.Method, url: req.URL.String()})
+func (c *Client) Do(req *http.Request, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "Do", req: req, verb: req.Method, url: req.URL.String(), timeout:timeout})
 }
 
 // Get provides the same functionality as http.Client.Get
-func (c *Client) Get(url string) (resp *http.Response, err error) {
-	return c.pester(params{method: "Get", url: url, verb: "GET"})
+func (c *Client) Get(url string, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "Get", url: url, verb: "GET", timeout:timeout})
 }
 
 // Head provides the same functionality as http.Client.Head
-func (c *Client) Head(url string) (resp *http.Response, err error) {
-	return c.pester(params{method: "Head", url: url, verb: "HEAD"})
+func (c *Client) Head(url string, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "Head", url: url, verb: "HEAD", timeout:timeout})
 }
 
 // Post provides the same functionality as http.Client.Post
-func (c *Client) Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error) {
-	return c.pester(params{method: "Post", url: url, bodyType: bodyType, body: body, verb: "POST"})
+func (c *Client) Post(url string, bodyType string, body io.Reader, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "Post", url: url, bodyType: bodyType, body: body, verb: "POST",timeout:timeout})
 }
 
 // PostForm provides the same functionality as http.Client.PostForm
-func (c *Client) PostForm(url string, data url.Values) (resp *http.Response, err error) {
-	return c.pester(params{method: "PostForm", url: url, data: data, verb: "POST"})
+func (c *Client) PostForm(url string, data url.Values, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "PostForm", url: url, data: data, verb: "POST",timeout:timeout})
 }
 
 // set RetryOnHTTP429 for clients,
@@ -434,31 +439,31 @@ func (c *Client) SetRetryOnHTTP429(flag bool) {
 ////////////////////////////////////////
 
 // Do provides the same functionality as http.Client.Do and creates its own constructor
-func Do(req *http.Request) (resp *http.Response, err error) {
+func Do(req *http.Request, timeout time.Duration) (resp *http.Response, err error) {
 	c := New()
-	return c.Do(req)
+	return c.Do(req, timeout)
 }
 
 // Get provides the same functionality as http.Client.Get and creates its own constructor
-func Get(url string) (resp *http.Response, err error) {
+func Get(url string, timeout time.Duration) (resp *http.Response, err error) {
 	c := New()
-	return c.Get(url)
+	return c.Get(url, timeout)
 }
 
 // Head provides the same functionality as http.Client.Head and creates its own constructor
-func Head(url string) (resp *http.Response, err error) {
+func Head(url string, timeout time.Duration) (resp *http.Response, err error) {
 	c := New()
-	return c.Head(url)
+	return c.Head(url, timeout)
 }
 
 // Post provides the same functionality as http.Client.Post and creates its own constructor
-func Post(url string, bodyType string, body io.Reader) (resp *http.Response, err error) {
+func Post(url string, bodyType string, body io.Reader, timeout time.Duration) (resp *http.Response, err error) {
 	c := New()
-	return c.Post(url, bodyType, body)
+	return c.Post(url, bodyType, body, timeout)
 }
 
 // PostForm provides the same functionality as http.Client.PostForm and creates its own constructor
-func PostForm(url string, data url.Values) (resp *http.Response, err error) {
+func PostForm(url string, data url.Values, timeout time.Duration) (resp *http.Response, err error) {
 	c := New()
-	return c.PostForm(url, data)
+	return c.PostForm(url, data, timeout)
 }
