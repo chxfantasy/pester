@@ -94,7 +94,7 @@ func main() {
 
 	log.Println("> pester.Post with defaults")
 	{ // use the pester.Post drop in replacement
-		resp, err := pester.Post(fmt.Sprintf("http://localhost:%d", port), "text/plain", strings.NewReader("data"), DefaultTimeOut)
+		resp, err := pester.Post(fmt.Sprintf("http://localhost:%d", port), strings.NewReader("data"), DefaultTimeOut)
 		if err != nil {
 			log.Fatalf("error POSTing with defaults - %v\n\n", err)
 		}

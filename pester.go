@@ -4,7 +4,6 @@ package pester
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -15,19 +14,9 @@ import (
 	"time"
 )
 
-//ErrUnexpectedMethod occurs when an http.Client method is unable to be mapped from a calling method in the pester client
-var ErrUnexpectedMethod = errors.New("unexpected client method, must be one of Do, Get, Head, Post, or PostFrom")
-
-// ErrReadingBody happens when we cannot read the body bytes
-var ErrReadingBody = errors.New("error reading body")
-
-// ErrReadingRequestBody happens when we cannot read the request body bytes
-var ErrReadingRequestBody = errors.New("error reading request body")
-
-var ErrNoTimeOutSet = errors.New("error no timeout set for params")
-
 // Client wraps the http client and exposes all the functionality of the http.Client.
 // Additionally, Client provides pester specific values for handling resiliency.
+// Concurrency only useful for GET
 type Client struct {
 	// wrap it to provide access to http built ins
 	hc *http.Client
@@ -81,7 +70,6 @@ type params struct {
 	verb     string
 	req      *http.Request
 	url      string
-	bodyType string
 	body     io.Reader
 	data     url.Values
 	timeout       time.Duration
@@ -91,63 +79,6 @@ var random *rand.Rand
 
 func init() {
 	random = rand.New(rand.NewSource(time.Now().UnixNano()))
-}
-
-// New constructs a new DefaultClient with sensible default values
-func New() *Client {
-	return &Client{
-		Concurrency:    DefaultClient.Concurrency,
-		MaxRetries:     DefaultClient.MaxRetries,
-		Backoff:        DefaultClient.Backoff,
-		ErrLog:         DefaultClient.ErrLog,
-		wg:             &sync.WaitGroup{},
-		RetryOnHTTP429: false,
-	}
-}
-
-// NewExtendedClient allows you to pass in an http.Client that is previously set up
-// and extends it to have Pester's features of concurrency and retries.
-func NewExtendedClient(hc *http.Client) *Client {
-	c := New()
-	c.hc = hc
-	return c
-}
-
-// LogHook is used to log attempts as they happen. This function is never called,
-// however, if KeepLog is set to true.
-type LogHook func(e ErrEntry)
-
-// BackoffStrategy is used to determine how long a retry request should wait until attempted
-type BackoffStrategy func(retry int) time.Duration
-
-// DefaultClient provides sensible defaults
-var DefaultClient = &Client{Concurrency: 1, MaxRetries: 3, Backoff: DefaultBackoff, ErrLog: []ErrEntry{}}
-
-// DefaultBackoff always returns 1 second
-func DefaultBackoff(_ int) time.Duration {
-	return 1 * time.Second
-}
-
-// ExponentialBackoff returns ever increasing backoffs by a power of 2
-func ExponentialBackoff(i int) time.Duration {
-	return time.Duration(1<<uint(i)) * time.Second
-}
-
-// ExponentialJitterBackoff returns ever increasing backoffs by a power of 2
-// with +/- 0-33% to prevent sychronized reuqests.
-func ExponentialJitterBackoff(i int) time.Duration {
-	return jitter(int(1 << uint(i)))
-}
-
-// LinearBackoff returns increasing durations, each a second longer than the last
-func LinearBackoff(i int) time.Duration {
-	return time.Duration(i) * time.Second
-}
-
-// LinearJitterBackoff returns increasing durations, each a second longer than the last
-// with +/- 0-33% to prevent sychronized reuqests.
-func LinearJitterBackoff(i int) time.Duration {
-	return jitter(i)
 }
 
 // jitter keeps the +/- 0-33% logic in one place
@@ -167,20 +98,15 @@ func jitter(i int) time.Duration {
 	return time.Duration(ms) * time.Millisecond
 }
 
-// Wait blocks until all pester requests have returned
-// Probably not that useful outside of testing.
-func (c *Client) Wait() {
-	c.wg.Wait()
-}
-
 // pester provides all the logic of retries, concurrency, backoff, and logging
 func (c *Client) pester(p params) (*http.Response, error) {
-	resultCh := make(chan result)
-	multiplexCh := make(chan result)
-	finishCh := make(chan struct{})
 	if p.timeout <= 0 {
 		return nil, ErrNoTimeOutSet
 	}
+
+	resultCh := make(chan result)
+	multiplexCh := make(chan result)
+	finishCh := make(chan struct{})
 
 	// track all requests that go out so we can close the late listener routine that closes late incoming response bodies
 	totalSentRequests := &sync.WaitGroup{}
@@ -276,7 +202,7 @@ func (c *Client) pester(p params) (*http.Response, error) {
 				case "Head":
 					resp, err = httpClient.Head(p.url)
 				case "Post":
-					resp, err = httpClient.Post(p.url, p.bodyType, p.body)
+					resp, err = httpClient.Post(p.url, "application/json", p.body)
 				case "PostForm":
 					resp, err = httpClient.PostForm(p.url, p.data)
 				default:
@@ -362,6 +288,33 @@ func (c *Client) pester(p params) (*http.Response, error) {
 
 }
 
+// pester provides all the logic of retries, concurrency, backoff, and logging
+func (c *Client) pesterAsyn(p params, callBack RequestCallBackFun, transmissionParams ...interface{}) error {
+	if p.timeout <= 0 {
+		return ErrNoTimeOutSet
+	}
+
+	go func() {
+		defer func() {
+			err := recover()
+			if err != nil {		//请求过程报错
+				c.log(ErrEntry{
+					Time:    time.Now(),
+					Method:  p.method,
+					Verb:    p.verb,
+					URL:     p.url,
+					Err:     ErrPanicDuringRequest,
+				})
+				callBack(nil, ErrPanicDuringRequest, c.LogString(), transmissionParams...)
+			}
+		}()
+
+		resp, err := c.pester(p)
+		callBack(resp, err, c.LogString(), transmissionParams...)
+	}()
+	return nil
+}
+
 // LogString provides a string representation of the errors the client has seen
 func (c *Client) LogString() string {
 	c.Lock()
@@ -371,6 +324,12 @@ func (c *Client) LogString() string {
 		res += c.FormatError(e)
 	}
 	return res
+}
+
+// Wait blocks until all pester requests have returned
+// Probably not that useful outside of testing.
+func (c *Client) Wait() {
+	c.wg.Wait()
 }
 
 // Format the Error to human readable string
@@ -409,9 +368,22 @@ func (c *Client) Do(req *http.Request, timeout time.Duration) (resp *http.Respon
 	return c.pester(params{method: "Do", req: req, verb: req.Method, url: req.URL.String(), timeout:timeout})
 }
 
+// Do provides the same functionality as http.Client.Do
+func (c *Client) DoAsyn(req *http.Request, timeout time.Duration,
+				fun RequestCallBackFun, transmissionParams ...interface{}) error{
+	return c.pesterAsyn(params{method: "Do", req: req, verb: req.Method, url: req.URL.String(), timeout:timeout},
+				fun, transmissionParams...)
+}
+
 // Get provides the same functionality as http.Client.Get
 func (c *Client) Get(url string, timeout time.Duration) (resp *http.Response, err error) {
 	return c.pester(params{method: "Get", url: url, verb: "GET", timeout:timeout})
+}
+
+// Get provides the same functionality as http.Client.Get
+func (c *Client) GetAsyn(url string, timeout time.Duration,
+			fun RequestCallBackFun, transmissionParams ...interface{}) error {
+	return c.pesterAsyn(params{method: "Get", url: url, verb: "GET", timeout:timeout}, fun, transmissionParams...)
 }
 
 // Head provides the same functionality as http.Client.Head
@@ -419,9 +391,19 @@ func (c *Client) Head(url string, timeout time.Duration) (resp *http.Response, e
 	return c.pester(params{method: "Head", url: url, verb: "HEAD", timeout:timeout})
 }
 
+
 // Post provides the same functionality as http.Client.Post
-func (c *Client) Post(url string, bodyType string, body io.Reader, timeout time.Duration) (resp *http.Response, err error) {
-	return c.pester(params{method: "Post", url: url, bodyType: bodyType, body: body, verb: "POST",timeout:timeout})
+// Post json
+func (c *Client) Post(url string, body []byte, timeout time.Duration) (resp *http.Response, err error) {
+	return c.pester(params{method: "Post", url: url, body: bytes.NewReader(body), verb: "POST",timeout:timeout})
+}
+
+// Post provides the same functionality as http.Client.Post
+// Post json
+func (c *Client) PostAsyn(url string, body []byte, timeout time.Duration,
+					fun RequestCallBackFun, transmissionParams ...interface{}) error{
+	return c.pesterAsyn(params{method: "Post", url: url, body: bytes.NewReader(body), verb: "POST",timeout:timeout},
+			fun, transmissionParams...)
 }
 
 // PostForm provides the same functionality as http.Client.PostForm
@@ -429,41 +411,14 @@ func (c *Client) PostForm(url string, data url.Values, timeout time.Duration) (r
 	return c.pester(params{method: "PostForm", url: url, data: data, verb: "POST",timeout:timeout})
 }
 
+// PostForm provides the same functionality as http.Client.PostForm
+func (c *Client) PostFormAsyn(url string, data url.Values, timeout time.Duration,
+			fun RequestCallBackFun, transmissionParams ...interface{}) error{
+	return c.pesterAsyn(params{method: "PostForm", url: url, data: data, verb: "POST",timeout:timeout},
+					fun, transmissionParams...)
+}
+
 // set RetryOnHTTP429 for clients,
 func (c *Client) SetRetryOnHTTP429(flag bool) {
 	c.RetryOnHTTP429 = flag
-}
-
-////////////////////////////////////////
-// Provide self-constructing variants //
-////////////////////////////////////////
-
-// Do provides the same functionality as http.Client.Do and creates its own constructor
-func Do(req *http.Request, timeout time.Duration) (resp *http.Response, err error) {
-	c := New()
-	return c.Do(req, timeout)
-}
-
-// Get provides the same functionality as http.Client.Get and creates its own constructor
-func Get(url string, timeout time.Duration) (resp *http.Response, err error) {
-	c := New()
-	return c.Get(url, timeout)
-}
-
-// Head provides the same functionality as http.Client.Head and creates its own constructor
-func Head(url string, timeout time.Duration) (resp *http.Response, err error) {
-	c := New()
-	return c.Head(url, timeout)
-}
-
-// Post provides the same functionality as http.Client.Post and creates its own constructor
-func Post(url string, bodyType string, body io.Reader, timeout time.Duration) (resp *http.Response, err error) {
-	c := New()
-	return c.Post(url, bodyType, body, timeout)
-}
-
-// PostForm provides the same functionality as http.Client.PostForm and creates its own constructor
-func PostForm(url string, data url.Values, timeout time.Duration) (resp *http.Response, err error) {
-	c := New()
-	return c.PostForm(url, data, timeout)
 }
